@@ -1,10 +1,11 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
   GameState, Station, StationType, GameEvent 
 } from './types';
 import { 
   INITIAL_CREDITS, INITIAL_REPUTATION, INITIAL_STATIONS, 
-  TICK_RATE_MS, BUILD_COST_BASE, UPGRADE_COST_BASE 
+  TICK_RATE_MS, BUILD_COST_BASE, UPGRADE_COST_BASE, STORAGE_KEY, TUTORIAL_KEY
 } from './constants';
 import { generateStationDetails, generateRandomGameEvent } from './services/geminiService';
 
@@ -12,7 +13,8 @@ import Header from './components/Header';
 import StationCard from './components/StationCard';
 import MapVisualizer from './components/MapVisualizer';
 import EventLog from './components/EventLog';
-import { PlusCircle, Play, Pause, RefreshCw } from 'lucide-react';
+import TutorialOverlay from './components/TutorialOverlay';
+import { PlusCircle, Play, Pause, RefreshCw, Save, Download, Trash2 } from 'lucide-react';
 
 export default function App() {
   // Game State
@@ -27,6 +29,24 @@ export default function App() {
 
   const [isPlaying, setIsPlaying] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+
+  // Initialize Tutorial
+  useEffect(() => {
+    const hasSeenTutorial = localStorage.getItem(TUTORIAL_KEY);
+    if (!hasSeenTutorial) {
+      setShowTutorial(true);
+    }
+  }, []);
+
+  const handleCloseTutorial = () => {
+    setShowTutorial(false);
+    localStorage.setItem(TUTORIAL_KEY, 'true');
+  };
+
+  const handleOpenTutorial = () => {
+    setShowTutorial(true);
+  }
 
   // Game Loop
   useEffect(() => {
@@ -162,13 +182,76 @@ export default function App() {
     }));
   };
 
+  const handleSaveGame = () => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(gameState));
+    setGameState(prev => ({
+      ...prev,
+      events: [{
+        id: `save-${Date.now()}`,
+        timestamp: prev.tick,
+        title: "System Backup",
+        description: "Game state secured to local memory banks.",
+        impact: 'neutral'
+      }, ...prev.events]
+    }));
+  };
+
+  const handleLoadGame = () => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const loaded = JSON.parse(saved);
+        // Verify integrity roughly
+        if (!loaded.stations || !loaded.credits) throw new Error("Invalid save");
+        
+        setGameState({
+          ...loaded,
+          events: [{
+            id: `load-${Date.now()}`,
+            timestamp: loaded.tick,
+            title: "System Restore",
+            description: "State restored from archive.",
+            impact: 'neutral'
+          }, ...loaded.events]
+        });
+      } catch (e) {
+        alert("Save file corrupted or incompatible.");
+      }
+    } else {
+      alert("No backup found in local archives.");
+    }
+  };
+
+  const handleResetGame = () => {
+    if (window.confirm("WARNING: SYSTEM WIPE INITIATED.\n\nThis will erase current progress. Are you sure?")) {
+      localStorage.removeItem(STORAGE_KEY);
+      setGameState({
+        credits: INITIAL_CREDITS,
+        reputation: INITIAL_REPUTATION,
+        energy: 100,
+        stations: INITIAL_STATIONS,
+        events: [{
+          id: `reset-${Date.now()}`,
+          timestamp: 0,
+          title: "System Reset",
+          description: "Factory settings restored.",
+          impact: 'neutral'
+        }],
+        tick: 0
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen pb-12">
+      {showTutorial && <TutorialOverlay onClose={handleCloseTutorial} />}
+      
       <Header 
         credits={gameState.credits}
         reputation={gameState.reputation}
         energy={gameState.energy}
         tick={gameState.tick}
+        onShowTutorial={handleOpenTutorial}
       />
 
       <main className="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-6 mt-4">
@@ -177,7 +260,7 @@ export default function App() {
         <div className="lg:col-span-8 space-y-6">
           
           {/* Map Section */}
-          <section>
+          <section id="tutorial-map">
             <div className="flex justify-between items-end mb-2">
                 <h2 className="text-xl font-bold text-white font-mono">NETWORK_MAP</h2>
                 <div className="flex gap-2">
@@ -193,7 +276,7 @@ export default function App() {
           </section>
 
           {/* Build Control */}
-          <div className="bg-gradient-to-r from-neon-panel to-black p-6 rounded-xl border border-neon-blue/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(0,0,0,0.4)]">
+          <div id="tutorial-build" className="bg-gradient-to-r from-neon-panel to-black p-6 rounded-xl border border-neon-blue/30 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-[0_0_15px_rgba(0,0,0,0.4)]">
             <div>
                 <h3 className="text-lg font-bold text-white">Expand Network</h3>
                 <p className="text-sm text-gray-400">Connect a new sector to the grid.</p>
@@ -219,7 +302,7 @@ export default function App() {
           </div>
 
           {/* Stations Grid */}
-          <section>
+          <section id="tutorial-stations">
             <h2 className="text-xl font-bold text-white font-mono mb-4">ACTIVE_STATIONS</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {gameState.stations.map(station => (
@@ -238,7 +321,9 @@ export default function App() {
 
         {/* Right Column: Logs & Info */}
         <div className="lg:col-span-4 space-y-6">
-           <EventLog events={gameState.events} />
+           <div id="tutorial-events">
+               <EventLog events={gameState.events} />
+           </div>
            
            <div className="bg-neon-panel/50 border border-gray-800 p-4 rounded-xl">
                <h3 className="text-sm font-bold text-gray-300 mb-2 uppercase font-mono">System Status</h3>
@@ -255,6 +340,36 @@ export default function App() {
                        <span>AI Core</span>
                        <span className="text-green-400">ONLINE</span>
                    </div>
+               </div>
+           </div>
+
+           {/* Data Management Control Panel */}
+           <div id="tutorial-data" className="bg-neon-panel/50 border border-gray-800 p-4 rounded-xl">
+               <h3 className="text-sm font-bold text-gray-300 mb-3 uppercase font-mono">Data Management</h3>
+               <div className="grid grid-cols-3 gap-2">
+                 <button 
+                   onClick={handleSaveGame}
+                   className="flex flex-col items-center justify-center gap-1 p-3 rounded bg-gray-900 border border-gray-700 hover:border-neon-blue hover:bg-gray-800 transition-all text-neon-blue group"
+                 >
+                   <Save size={18} className="group-hover:scale-110 transition-transform" />
+                   <span className="text-[10px] font-mono uppercase">Save</span>
+                 </button>
+                 
+                 <button 
+                   onClick={handleLoadGame}
+                   className="flex flex-col items-center justify-center gap-1 p-3 rounded bg-gray-900 border border-gray-700 hover:border-yellow-400 hover:bg-gray-800 transition-all text-yellow-400 group"
+                 >
+                   <Download size={18} className="group-hover:scale-110 transition-transform" />
+                   <span className="text-[10px] font-mono uppercase">Load</span>
+                 </button>
+                 
+                 <button 
+                   onClick={handleResetGame}
+                   className="flex flex-col items-center justify-center gap-1 p-3 rounded bg-gray-900 border border-gray-700 hover:border-red-500 hover:bg-gray-800 transition-all text-red-500 group"
+                 >
+                   <Trash2 size={18} className="group-hover:scale-110 transition-transform" />
+                   <span className="text-[10px] font-mono uppercase">Wipe</span>
+                 </button>
                </div>
            </div>
         </div>

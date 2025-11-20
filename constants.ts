@@ -1,3 +1,4 @@
+
 import { Station, StationType } from './types';
 
 export const INITIAL_CREDITS = 1000;
@@ -6,6 +7,8 @@ export const MAX_ENERGY = 100;
 export const TICK_RATE_MS = 2000; // Game tick every 2 seconds
 export const BUILD_COST_BASE = 500;
 export const UPGRADE_COST_BASE = 200;
+export const STORAGE_KEY = 'neon-rails-save-v1';
+export const TUTORIAL_KEY = 'neon-rails-tutorial-v2';
 
 // Placeholder images for visual flavor
 export const IMG_CYBER_CITY = "https://picsum.photos/800/400";
